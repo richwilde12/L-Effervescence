@@ -9,7 +9,7 @@
   <meta name="apple-mobile-web-app-title" content="Effervescence">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="theme-color" content="#F9F6F0">
-  <!-- No start_url in this file on purpose: on iPhone it would replace your personal link. -->
+  <!-- No start_url in this file on purpose: on iPhone it would replace the shared link with its code. -->
   <link rel="manifest" href="manifest.webmanifest" id="manifest-link">
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
   <link rel="icon" href="favicon.ico" sizes="any">
@@ -27,8 +27,8 @@
   <iframe id="app" title="L'Effervescence" hidden></iframe>
 
   <div id="needs-link">
-    <h1>Open your personal link</h1>
-    <p>This app opens from the personal link Serena or Liz sent you. Open that link once, then add it to your home screen.</p>
+    <h1>Open the shared link</h1>
+    <p>This app opens from the link Serena or Liz shared. Open that link once, pick your name, then add it to your home screen.</p>
   </div>
 
   <script>
@@ -37,6 +37,7 @@
       var EXEC_URL = 'https://script.google.com/macros/s/AKfycbzGNQgr9JGRdLlIrTg72Im3wOeNl5kU8IhqlTP6tcK4rqIbmPWylT8DDipQciiVqR6EAA/exec';
 
       var STORAGE_KEY = 'effervescence.code';
+      var NAME_KEY = 'effervescence.name';
       var ALLOWED_ORIGIN = /^https:\/\/([a-z0-9-]+\.)*(script\.google\.com|googleusercontent\.com)$/;
 
       function cleanCode(c) {
@@ -50,6 +51,12 @@
         else code = cleanCode(localStorage.getItem(STORAGE_KEY));
       } catch (e) { /* storage unavailable: the link in the address is enough */ }
 
+      var name = '';
+      try {
+        var n = localStorage.getItem(NAME_KEY);
+        if (n === 'Serena' || n === 'Liz') name = n;
+      } catch (e) { /* storage unavailable: the app will ask again */ }
+
       var frame = document.getElementById('app');
       var needs = document.getElementById('needs-link');
 
@@ -58,7 +65,7 @@
         return;
       }
 
-      // 2. Android: give Chrome a manifest whose start_url is this exact personal link,
+      // 2. Android: give Chrome a manifest whose start_url is this exact shared link,
       //    so the installed app always opens as the right person.
       try {
         var abs = function (p) { return new URL(p, location.href).href; };
@@ -79,14 +86,20 @@
         document.getElementById('manifest-link').setAttribute('href', URL.createObjectURL(blob));
       } catch (e) { /* the static manifest stays in place */ }
 
-      frame.src = EXEC_URL + '?r=' + encodeURIComponent(code);
+      frame.src = EXEC_URL + '?r=' + encodeURIComponent(code) + (name ? '&wn=' + encodeURIComponent(name) : '');
       frame.hidden = false;
 
       // 3. The app tells us which colour the strip under its tab bar should be.
       window.addEventListener('message', function (ev) {
         if (!ALLOWED_ORIGIN.test(ev.origin)) return;
         var d = ev.data;
-        if (!d || d.wf !== 'bg' || !/^#[0-9a-fA-F]{6}$/.test(d.c || '')) return;
+        if (!d) return;
+        if (d.wf === 'id') {
+          // The app says who this phone is. Only the two known names are kept; an empty value never wipes a saved one.
+          if (d.n === 'Serena' || d.n === 'Liz') { try { localStorage.setItem(NAME_KEY, d.n); } catch (e) { /* non-fatal */ } }
+          return;
+        }
+        if (d.wf !== 'bg' || !/^#[0-9a-fA-F]{6}$/.test(d.c || '')) return;
         document.documentElement.style.background = d.c;
         document.body.style.background = d.c;
       });
